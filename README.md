@@ -7,13 +7,13 @@ GitHub Stars(즐겨찾기) 레포지토리를 카테고리로 분류해 Markdown
 아래 URL은 실제 public 배포 시 raw URL로 교체하세요.
 
 ```bash
-curl -fsSL https://example.com/pub-star-classifier/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/WisemanLim/pub-star-classifier/refs/heads/main/install.sh | bash
 ```
 
 삭제:
 
 ```bash
-curl -fsSL https://example.com/pub-star-classifier/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/WisemanLim/pub-star-classifier/refs/heads/main/uninstall.sh | bash
 ```
 
 ## 로컬 실행(install.sh 없이 `git clone`으로)
