@@ -111,6 +111,7 @@ class Repo:
     language: str
     stargazers_count: int
     license: str
+    updated_at: str = ""
 
     @property
     def name(self) -> str:
@@ -251,10 +252,26 @@ def fetch_starred(user_id: str, token: Optional[str]) -> List[Repo]:
                     language=item.get("language") or "",
                     stargazers_count=int(item.get("stargazers_count") or 0),
                     license=lic,
+                    updated_at=item.get("updated_at") or "",
                 )
             )
         url = parse_next_link(headers.get("link", ""))
     return repos
+
+
+def parse_updated_at(updated_at: str) -> datetime:
+    """
+    GitHub의 updated_at은 대개 ISO8601 (예: '2026-03-20T12:34:56Z') 형태입니다.
+    파싱 실패 시 최소값을 반환합니다.
+    """
+    if not updated_at:
+        return datetime.min
+    try:
+        # 'Z'를 타임존 오프셋으로 변환
+        s = updated_at.replace("Z", "+00:00")
+        return datetime.fromisoformat(s)
+    except Exception:
+        return datetime.min
 
 
 def markdown_table_top(repos: List[Repo], top_n: int, category_by_full_name: Optional[Dict[str, str]] = None) -> str:
@@ -307,16 +324,21 @@ def markdown_all_by_category(
     out.append("## 카테고리별 전체 목록")
     out.append("")
     out.append("> 정렬: 카테고리 내 Stars 내림차순")
+    out[-1] = "> 정렬: 카테고리 내 Stars 내림차순, Stars 동률이면 Updated 최신순"
     out.append("")
 
     for cat in CATEGORIES.keys():
-        items = sorted(categorized.get(cat, []), key=lambda x: x.stargazers_count, reverse=True)
+        items = sorted(
+            categorized.get(cat, []),
+            key=lambda x: (x.stargazers_count, parse_updated_at(x.updated_at)),
+            reverse=True,
+        )
         out.append(f"### {cat} ({len(items)})")
         out.append("")
-        out.append("| 프로젝트 | 설명 | 언어 | Stars | License |")
-        out.append("|---|---|---:|---:|---|")
+        out.append("| 프로젝트 | 설명 | 언어 | Stars | Updated | License |")
+        out.append("|---|---|---:|---:|---|---|")
         if not items:
-            out.append("| - | - | - | - | - |")
+            out.append("| - | - | - | - | - | - |")
             out.append("")
             continue
         for r in items:
@@ -326,7 +348,11 @@ def markdown_all_by_category(
                 desc = "-"
             lang = r.language or "-"
             lic = r.license or "-"
-            out.append(f"| {proj} | {desc} | {lang} | {r.stargazers_count} | {lic} |")
+            # 보기 좋게 날짜만 표시 (시간은 불필요한 경우가 많음)
+            updated_disp = r.updated_at.split("T", 1)[0] if r.updated_at else "-"
+            out.append(
+                f"| {proj} | {desc} | {lang} | {r.stargazers_count} | {updated_disp} | {lic} |"
+            )
         out.append("")
 
     return "\n".join(out).rstrip() + "\n"
