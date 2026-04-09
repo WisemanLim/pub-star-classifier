@@ -362,7 +362,7 @@ def ensure_out_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
-def write_outputs(out_dir: Path, user_id: str, repos: List[Repo], top_n: int, fmt: str) -> Dict[str, Path]:
+def write_outputs(out_dir: Path, user_id: str, repos: List[Repo], top_n: int, fmt: str, pdf_flag: bool = True) -> Dict[str, Path]:
     ensure_out_dir(out_dir)
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     paths: Dict[str, Path] = {}
@@ -378,11 +378,25 @@ def write_outputs(out_dir: Path, user_id: str, repos: List[Repo], top_n: int, fm
 
     if fmt in {"md", "both"}:
         md_path = out_dir / f"{user_id}-stars-{ts}.md"
+        md_text = markdown_all_by_category(repos, top_n, category_by_full_name, newly_classified)
         md_path.write_text(
-            markdown_all_by_category(repos, top_n, category_by_full_name, newly_classified),
+            md_text,
             encoding="utf-8",
         )
         paths["md"] = md_path
+        
+        if pdf_flag:
+            try:
+                from markdown_pdf import MarkdownPdf, Section
+                pdf_doc = MarkdownPdf(toc_level=2)
+                pdf_doc.add_section(Section(md_text))
+                pdf_path = out_dir / f"{user_id}-stars-{ts}.pdf"
+                pdf_doc.save(str(pdf_path))
+                paths["pdf"] = pdf_path
+            except ImportError:
+                eprint("경고: PDF 변환을 위한 패키지가 없습니다. 'pip3 install markdown-pdf'를 실행해주세요.")
+            except Exception as e:
+                eprint(f"PDF 생성 중 오류가 발생했습니다: {e}")
 
     if fmt in {"json", "both"}:
         json_path = out_dir / f"{user_id}-stars-{ts}.json"
@@ -480,6 +494,7 @@ def main() -> int:
     parser.add_argument("--cron", dest="cron_expr", help="cron 표현식 직접 지정 (예: '0 9 * * *')")
     parser.add_argument("--remove-cron", action="store_true", help="등록된 crontab 항목 제거")
     parser.add_argument("--non-interactive", action="store_true", help="프롬프트 없이 실행")
+    parser.add_argument("--pdf", dest="pdf", choices=["true", "false"], default="true", help="MD 파일 생성 시 PDF 병행 생성 여부 (기본: true)")
 
     args = parser.parse_args()
 
@@ -563,7 +578,7 @@ def main() -> int:
         return 1
     repos = apply_range(repos, range_tuple)
 
-    paths = write_outputs(out_dir, user_id, repos, args.top_n, args.fmt)
+    paths = write_outputs(out_dir, user_id, repos, args.top_n, args.fmt, args.pdf.lower() == "true")
     print(f"분석 완료: {len(repos)}개 레포")
     for k, p in paths.items():
         print(f"- {k}: {p}")
