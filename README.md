@@ -88,6 +88,11 @@ pub-star-classifier --format md --top 3
   - `PSC_OUT_DIR=./output`
   - `PSC_OUT_DIR=/Users/<you>/Documents/pub-star-classifier-output`
 
+### `GEMINI_API_KEY` (선택)
+- **무엇인가요**: 프로젝트 설명이 5,000자 이상일 때 내용을 자동으로 짧게 요약(1~2줄)해 주는 Google Gemini API 키입니다. (지정하지 않으면 내용이 잘리고 `...`이 붙습니다.)
+- **어떻게 얻나요**
+  - [Google AI Studio](https://aistudio.google.com/)에서 무료로 발급받을 수 있습니다.
+
 ### `.env` 만들기 예시
 
 ```bash
@@ -100,6 +105,7 @@ cp .env.sample .env
 PSC_USER_ID=WisemanLim
 PSC_GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 PSC_OUT_DIR=./output
+GEMINI_API_KEY=AIzaSy...
 ```
 
 배치 등록:

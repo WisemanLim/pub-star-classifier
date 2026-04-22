@@ -296,11 +296,36 @@ def markdown_table_top(repos: List[Repo], top_n: int, category_by_full_name: Opt
     return "\n".join(lines) + "\n"
 
 
+def summarize_description(desc: str, api_key: str) -> str:
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    headers = {
+        "Content-Type": "application/json"
+    }
+    prompt = "다음 GitHub 리포지토리의 설명이 너무 깁니다. 프로젝트의 핵심 기능이 무엇인지 파악하기 쉽게 1~2문장의 한국어로 짧게 요약해 주세요. (150자 이내)\n\n" + desc
+    data = {
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }],
+        "generationConfig": {
+            "temperature": 0.3
+        }
+    }
+    
+    try:
+        req = urllib.request.Request(url, data=json.dumps(data).encode("utf-8"), headers=headers, method="POST")
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+            return body["candidates"][0]["content"]["parts"][0]["text"].replace("\n", " ").strip()
+    except Exception as e:
+        eprint(f"Gemini 요약 API 오류: {e}")
+        return desc[:5000] + "..."
+
 def markdown_all_by_category(
     repos: List[Repo],
     top_n_summary: int,
     category_by_full_name: Dict[str, str],
     newly_classified_full_names: Optional[set] = None,
+    gemini_key: Optional[str] = None,
 ) -> str:
     categorized: Dict[str, List[Repo]] = {k: [] for k in CATEGORIES.keys()}
     for r in repos:
@@ -344,6 +369,11 @@ def markdown_all_by_category(
         for r in items:
             proj = f"[{r.full_name}]({r.html_url})"
             desc = (r.description or "").replace("\n", " ").strip()
+            if len(desc) >= 5000:
+                if gemini_key:
+                    desc = summarize_description(desc, gemini_key)
+                else:
+                    desc = desc[:5000] + "..."
             if not desc:
                 desc = "-"
             lang = r.language or "-"
@@ -362,7 +392,7 @@ def ensure_out_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
-def write_outputs(out_dir: Path, user_id: str, repos: List[Repo], top_n: int, fmt: str, pdf_flag: bool = True) -> Dict[str, Path]:
+def write_outputs(out_dir: Path, user_id: str, repos: List[Repo], top_n: int, fmt: str, pdf_flag: bool = False, gemini_key: Optional[str] = None) -> Dict[str, Path]:
     ensure_out_dir(out_dir)
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     paths: Dict[str, Path] = {}
@@ -378,7 +408,7 @@ def write_outputs(out_dir: Path, user_id: str, repos: List[Repo], top_n: int, fm
 
     if fmt in {"md", "both"}:
         md_path = out_dir / f"{user_id}-stars-{ts}.md"
-        md_text = markdown_all_by_category(repos, top_n, category_by_full_name, newly_classified)
+        md_text = markdown_all_by_category(repos, top_n, category_by_full_name, newly_classified, gemini_key)
         md_path.write_text(
             md_text,
             encoding="utf-8",
@@ -494,7 +524,7 @@ def main() -> int:
     parser.add_argument("--cron", dest="cron_expr", help="cron 표현식 직접 지정 (예: '0 9 * * *')")
     parser.add_argument("--remove-cron", action="store_true", help="등록된 crontab 항목 제거")
     parser.add_argument("--non-interactive", action="store_true", help="프롬프트 없이 실행")
-    parser.add_argument("--pdf", dest="pdf", choices=["true", "false"], default="true", help="MD 파일 생성 시 PDF 병행 생성 여부 (기본: true)")
+    parser.add_argument("--pdf", dest="pdf", choices=["true", "false"], default="false", help="MD 파일 생성 시 PDF 병행 생성 여부 (기본: true)")
 
     args = parser.parse_args()
 
@@ -539,6 +569,11 @@ def main() -> int:
         or (os.getenv("GITHUB_TOKEN") or "").strip()
     ) or None
 
+    gemini_key = (
+        (dotenv.get("GEMINI_API_KEY") or "").strip()
+        or (os.getenv("GEMINI_API_KEY") or "").strip()
+    ) or None
+
     out_dir = Path(args.out_dir or (dotenv.get("PSC_OUT_DIR") or "") or str(DEFAULT_OUT_DIR)).expanduser()
     try:
         range_tuple = parse_range(args.range_spec)
@@ -578,7 +613,7 @@ def main() -> int:
         return 1
     repos = apply_range(repos, range_tuple)
 
-    paths = write_outputs(out_dir, user_id, repos, args.top_n, args.fmt, args.pdf.lower() == "true")
+    paths = write_outputs(out_dir, user_id, repos, args.top_n, args.fmt, args.pdf.lower() == "true", gemini_key)
     print(f"분석 완료: {len(repos)}개 레포")
     for k, p in paths.items():
         print(f"- {k}: {p}")
