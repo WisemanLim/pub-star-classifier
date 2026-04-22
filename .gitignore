@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 .npm
+bin/__pycache__/
 
 # Package managers
 yarn-error.log
